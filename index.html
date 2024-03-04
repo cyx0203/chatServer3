@@ -1,0 +1,919 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+    <style>
+      .remote1{
+	        width: 100%;
+	        height: 100%;
+	        display: flex;
+	        justify-content: flex-start;
+	    }
+	    .shade{
+	        position: fixed;
+	        width:100vw;
+	        height: 100vh;
+	        left: 0;
+	        top:0;
+	        z-index: 100;
+	        background-color: rgba(0,0,0,0.9);
+	        .input-container{
+	            position: absolute;
+	            left:50%;
+	            top:30%;
+	            transform: translate(-50%, 50%);
+	            display: flex;
+	            justify-content: space-between;
+	            align-items: center;
+	            input{
+	                margin: 0;
+	            }
+	        }
+	    }
+	    .userList{
+	        border: 1px solid #ddd;
+	        margin-right: 50px;
+	        h5{
+	            text-align: left;
+	            margin-bottom: 5px;
+	        }
+	        p{
+	            border-bottom: 1px solid #ddd;
+	            line-height: 32px;
+	            width:200px;
+	            position: relative;
+	            overflow: hidden;
+	            cursor: pointer;
+	            span{
+	                position: absolute;
+	                left:0;
+	                top:100%;
+	                background-color: #1fbeca;
+	                color: #fff;
+	                height: 100%;
+	                transition: top 0.2s;
+	                display: block;
+	                width: 100%;
+	            }
+	            i{
+	                font-style: normal;
+	                font-size: 11px;
+	                border: 1px solid #1fbeca;
+	                color: #27cac7;
+	                border-radius: 2px;
+	                line-height: 1;
+	                display: block;
+	                position: absolute;
+	                padding: 1px 2px;
+	                right: 5px;
+	                top: 5px;
+	            }
+	        }
+	        p:last-child{
+	          border-bottom: none;
+	        }
+	        p:hover span{
+	            top:0;
+	        }
+	    }
+	    .video-container{
+	        display: flex;
+	        justify-content: center;
+	        video{
+	            width: 400px;
+	            height: 300px;
+	            margin-left: 20px;
+	            background-color: #ddd;
+	        }
+	    }
+		.rtcBox {
+			display: flex;
+			justify-content: center;
+			.video-box {
+				height: 320px;
+				border-bottom: 1px solid #1fbeca;
+				margin-bottom: 10px;
+			}
+			video {
+				width: 320px;
+				height: 240px;
+				margin-left: 20px;
+				background-color: #ddd;
+			}
+		}
+		</style>
+		<script src="/socket.io/socket.io.js"></script>
+		 <!--<script src="https://lib.baomitu.com/socket.io/4.4.1/socket.io.js"></script>-->
+		<script src="/js/jquery-1.12.4.min.js"></script>
+		<script src="/js/GGRtcClient-1.2.0.js"></script>
+		<!--<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>-->
+  </head>
+
+  <body>
+	<label>房间名:</label>
+	<input type="text" id="roomId" value="room1"/>
+	<label>用户名:</label>
+	<input type="text" id="userId" value=""/>
+	<button id="btn_joinRoom">加入房间</button>
+	<button id="btn_leaveRoom">离开房间</button>
+	<br/>
+
+	<label>聊天内容:</label><br/>
+	<textarea id="content" style="height: 200px; width:300px;" readonly></textarea>
+	<br/>
+	<input id="sendMsg" type="text"/>
+	<button id="btn_send">发送</button>
+
+	<br><br>
+	<label>房间用户列表:</label><br/>
+	<div class="login-users-container">
+		<ul id="login-users"></ul>
+	</div>
+	<br><br>
+
+	<label>视频聊天:</label><br/>
+	信源：
+	<div id="setting-collapse" class="collapse" aria-labelledby="setting-collapse">
+		<div class="card-body">
+			<div class="form-group">
+				<label for="cameraId" class="bmd-label-floating">摄像头</label>
+				<select class="form-control" id="cameraId" name="cameraId"></select>　
+				<label for="cameraPixel" class="bmd-label-floating">像素</label>
+				<select class="form-control" id="cameraPixel" name="cameraPixel"></select>
+				帧率：<input id="frameRate" type="text" placeholder="请输入帧率（15-24）" value="15"/>
+				码率：<select id="bandwidth" disabled>
+							<option value="unlimited" selected>unlimited</option>
+							<option value="2000">2000</option>
+							<option value="1000">1000</option>
+							<option value="500">500</option>
+							<option value="250">250</option>
+							<option value="125">125</option>
+						</select>
+						kbps
+			</div>
+			<div class="form-group">
+				<label for="microphoneId" class="bmd-label-floating">麦克风</label>
+				<select class="form-control" id="microphoneId" name="microphoneId"></select>
+			</div>
+		</div>
+	</div>
+	<br>
+	<input id="callee" type="text" placeholder="请输入你要呼叫的用户"/>
+	<button id="btn_call">呼叫</button>
+	<button id="btn_muteAudio">静音</button>
+	<button id="btn_muteVideo">静视</button>
+	<button id="btn_hangup">挂断</button>
+	<button id="btn_share">开始分享本地桌面</button>
+	<label id="prompt" desc="提示信息"></label>
+	<br><br>
+
+	<button id="btn_recLocal">录制本地视频</button>
+	<button id="btn_replayLocal">播放本地录制视频</button>
+	<button id="btn_downloadLocal">下载录制的本地视频</button>
+	<button id="btn_uploadLocal">上传录制的本地视频</button>
+	<br><br>
+
+	<button id="btn_recRemote">录制远端视频</button>
+	<button id="btn_replayRemote">播放远端录制视频</button>
+	<button id="btn_downloadRemote">下载录制的远端视频</button>
+	<button id="btn_uploadRemote">上传录制的远端视频</button>
+	<br><br>
+
+	<label id="rate" desc="码率信息"></label>
+
+	<div class="video-box">
+		<h5>A</h5>
+		<video id="rtcA" controls autoplay playsinline webkit-playsinline muted></video>
+	</div>
+
+	<div class="video-box">
+		<h5>B</h5>
+		<video id="rtcB" controls autoplay playsinline webkit-playsinline></video>
+	</div>
+
+	<div class="video-box">
+		<h5>本地REC</h5>
+		<video id="rtcLocalREC" controls autoplay playsinline webkit-playsinline></video>
+	</div>
+
+	<div class="video-box">
+		<h5>远端REC</h5>
+		<video id="rtcRemoteREC" controls autoplay playsinline webkit-playsinline></video>
+	</div>
+
+	<div class="video-box">
+		<h5>本地Share</h5>
+		<video id="lshare" controls autoplay playsinline webkit-playsinline></video>
+	</div>
+
+	<div class="video-box">
+		<h5>远端Share</h5>
+		<video id="share" controls autoplay playsinline webkit-playsinline></video>
+	</div>
+
+	<!--解决electron开发的浏览器不支持jQuery的$符号问题-->
+	<script>if (typeof module === 'object') {window.jQuery = window.$ = module.exports;};</script>
+  <script>
+	$(function () {
+    var rtcClient;   // rtc对象
+
+	  var g_constraints = {audio: true,  video: true};  // 音视频设备运行参数
+	  var g_currentPixel;               // 当前使用的摄像头分辨率
+		var g_currentFrameRate = 15;      // 当前帧率
+    var g_currentAudioID = "";        // 当前麦克风设备id
+		var g_currentVideoID = "";        // 当前摄像头设备id
+
+		var g_isJoinRoom = false;    // 是否进入了房间
+		var g_isCalling = false;     // 当前用户是否在通话中
+
+		//this._loading = true;
+		//this._loadingText = '正在建立通话连接';
+
+		/* 信息提示 */
+		function showPrompt (msg) {
+			$("#prompt")[0].innerHTML = "<font color='red'><b>" + msg + "</b></font>";
+			setTimeout(() => {
+				$("#prompt")[0].innerHTML = "";
+			}, 3000);
+		}
+
+		/* 执行初始化 */
+		init();
+
+		/* 初始化 */
+		function init() {
+
+			// step0 特殊的初始化处理
+			$('#userId').val('user_' + parseInt(Math.random() * 100));   // 用户id（每个用户必须唯一）
+
+			// step1  检测浏览器是否支持RTC
+			if(!testSupportRTC()) return;
+
+			// step2  提示获取摄像头等设备权限后，再列举设备
+			getPermissionsAndEnumDevices();
+
+			// step3 初始化其他
+			listPixel(); // 列举和选定默认分辨率
+
+			// step4  初始化控件基础绑定事件
+			doBindControlEvent();
+
+			// step5 初始化控件变更事件
+			doBindChangeEvent();
+		}
+
+
+		/* 监测浏览器是否支持RTC */
+		function testSupportRTC() {
+			return GGRtcClient.CheckSupportWebRTC();
+		}
+
+
+		/* 提示获取摄像头等设备权限后，再列举设备 */
+		function getPermissionsAndEnumDevices() {
+			// 直接列举设备
+			// listEnumerateDevices();
+
+			// 先询问权限，再列举设备列表 -- 靠谱
+			GGRtcClient.getPermissions()
+			 .then(() => {
+			 	listEnumerateDevices();
+			 });
+
+			// 绑定设备变更事件操作函数
+			GGRtcClient.bindOnDeviceChange(listEnumerateDevices);
+		}
+
+
+		/* 设备初始化 - 获取本地摄像头和麦克风 */
+		function listEnumerateDevices() {
+
+			// 获取摄像头设备后的回调函数操作，应用层可自定义操作
+			let getDeviceListCB = function (deviceArray) {
+
+				// 列举媒体设备
+				console.log("========== 列举媒体设备 ===========");
+
+				// 先清空下拉框
+				$("#microphoneId").empty();
+				$("#cameraId").empty();
+
+				// 分别将音频和视频设备添加到下拉框
+				deviceArray.forEach(device => {
+					// console.log(device)
+					let [kind, type, direction] = device.kind.match(/(\w+)(input|output)/i);
+			    // console.log(kind + ":" + type + ":" + direction)
+					// console.log(device.kind + ": " + device.label + " id = " + device.deviceId);
+					if (type == "audio" && direction == "input") {
+						$('<option/>', {value: device.deviceId, text: device.label}).appendTo('#microphoneId');
+					}
+					else if (type == "video" && direction == "input") {
+						$('<option/>', {value: device.deviceId, text: device.label}).appendTo('#cameraId');
+					}
+				});
+			};
+
+	    // 初始化设备
+	    GGRtcClient.GetInitLocalDevices(getDeviceListCB)
+			 .then(() => {
+			  	// 设置默认设备id（当前下拉框所选的设备作为默认）
+				g_currentVideoID = $("#cameraId").val();
+				g_currentAudioID = $("#microphoneId").val();
+				console.log("g_currentVideoID = " + g_currentVideoID);
+				console.log("g_currentAudioID = " + g_currentAudioID);
+
+				update_g_constraints(); // 更新g_constraints对象参数
+	  	});
+		}
+
+
+		/* 更新g_constraints对象参数 */
+		// 由前端主动调用，当需要切换设备或分辨率时，需要调用，如果正在视频当中，则还需要重新做媒体协商
+		function update_g_constraints() {
+			if(!g_currentAudioID || !g_currentVideoID) return;
+
+			g_constraints = {
+			   audio: { deviceId: g_currentAudioID },
+			   video: { deviceId: g_currentVideoID, width:{}, height:{}}
+			};
+
+			if(g_currentPixel) {  // 格式：640x480
+				g_constraints.video.width = g_currentPixel.split("x")[0];
+				g_constraints.video.height = g_currentPixel.split("x")[1];  // min exact ideal
+			}
+			g_constraints.video.frameRate = {ideal:g_currentFrameRate, max:24};  // 帧率
+			console.log("g_constraints", g_constraints);
+
+			// 如果初始化了GGRtcClient，则务必要更新
+			if(rtcClient) {
+				console.log("更新rtcClient的_constraints");
+				rtcClient._constraints = g_constraints;
+			}
+		}
+
+
+		/* 列举分辨率项到下拉框 */
+		function listPixel() {
+			// 摄像头分辨率Pixel
+			$("#cameraPixel").empty();  // 先清空
+
+			// 从GGRtcClient全局定义的分辨率参数获取
+			GGRtcClient.g_pixel_mode.forEach((item, index) => {
+				$('<option/>', {value: item.pixel.width + "x" + item.pixel.height, text: item.desc + "(" + item.type + ")"}).appendTo('#cameraPixel');
+				if(item.default) {
+					$('#cameraPixel').get(0).selectedIndex = index; // 默认选中（注意不能触发change事件）
+				}
+			});
+		}
+
+
+		// 创建RTCCilent对象
+		function createRTCClient() {
+			// 参数对象
+			let options = {
+					userId : $('#userId').val(),            // 用户id
+					roomId : $('#roomId').val(),            // 房间号
+					cameraId: $('#cameraId').val(),         // 当前摄像头id（如果不传，则取系统默认值）
+					microphoneId: $('#microphoneId').val(), // 当前麦克风id（如果不传，则取系统默认值）
+
+					// 设置本地和远程视频播放的dom-video的id
+					local_stream_play_video: 'rtcA',
+					remote_stream_play_video: 'rtcB',
+					// 远端分享流播放的dom-video的id
+					remote_share_stream_play_video: 'share',
+					// 本地分享流播放的dom-video的id
+					// local_share_stream_play_video: 'lshare',
+
+					// 音视频约束参数（重要）
+					constraints: g_constraints,
+
+					// 信令服务器地址
+					SignalServerAddr : "https://localhost:8443",
+
+					// 上传音视频文件的服务端URL
+					uploadServerURL: "http://127.0.0.1:9091/wxplatpro/upload/",
+
+					// 是否禁用视频(false或不配置，则不禁用) （默认false）
+					muteVideo : false,
+					// 是否禁用流量监控（默认false）
+					disableRateMonitor : false,
+
+					// 绑定回调函数
+					callback: {
+
+						// ================== 其他人加入房间通知 ==================
+						onAnotherUserJoin : function(account, userlist) {
+							// 刷新列表显示
+							$('#login-users').empty();  // 先清空用户列表
+							// 重新加载
+							for (let index in userlist) {
+								$('#login-users').append($('<li>').text(userlist[index].account));
+							}
+						},
+
+						// ================== 群发送消息通知 ==================
+						onBroadcastMsg : function(data) {
+							var content = document.querySelector("#content");  // 历史消息框
+							content.value += data.account + "说:" + data.message + "\r\n";
+							// 聊天框自动滚动到最下方
+							content.scrollTop = content.scrollHeight;
+						},
+
+						// ================== 其他人离开房间通知 ==================
+						onAnotherUserLeave : function(account, userlist) {
+							// 刷新列表显示
+							$('#login-users').empty();  // 先清空用户列表
+
+							// 重新加载
+							for (let index in userlist) {
+								$('#login-users').append($('<li>').text(userlist[index].account));
+							}
+						},
+
+						// ================== （被呼叫端）收到呼叫请求消息 ==================
+						onCall : function(data, isCalling) {
+							console.log("onCall", data); // 格式： {roomid: "room1", callee: "user_17", caller: "user_84"}
+							console.log("isCalling", isCalling);  // 当前是否正在视频会话中，true-是，false-否
+							try {
+								if (isCalling) { // 判断自己是否在通话中
+									console.log("收到呼叫，但当前已经处在通话中");
+									data.replyCode = 3;  // 发送响应（状态码为3，表示在通话中）
+									return;
+								}
+
+								if(confirm("用户 " + data.caller + ' 向你请求视频通话, 是否同意?')) {
+									console.log("同意");
+									g_isCalling = true;  // 保存到全局变量
+									data.replyCode = 1;  // 发送响应（状态码为1，表示同意）
+								}
+								else {
+									console.log("拒绝");
+									data.replyCode = 2;  // 发送响应（状态码为2，表示拒绝）
+								}
+							}
+							finally {
+								console.log("准备发送reply响应");
+								rtcClient.reply(data);    // 主动发送回应(给呼叫端)
+							}
+						},
+
+						// ================== （呼叫端）收到被呼叫端请求响应消息 ==================
+						onReply : function(data, isCalling) {
+							console.log("onReply", data);  // {roomid: "room1", callee: "user_85", caller: "user_9", replyCode: 1}
+							console.log("isCalling", isCalling);  // 是否正在视频会话中，true-是，false-否
+							g_isCalling = isCalling; // 保存到全局变量
+						},
+
+						// ================== 视频P2P握手连接完成 ==============================
+						onP2PConnectCompleted : function() {
+							console.log("视频P2P握手连接完成...");
+
+						 	console.log("开启码率设置功能");
+			        $('#bandwidth').attr("disabled", false);  // 在P2P对接成功后设置
+						},
+
+						// ================== 收到远端静音/视消息 ==================
+						onRemoteMute : function(data, isCalling) {
+							console.log("收到远端静音/视消息...", data, isCalling);
+							var remote = data.from;
+							showPrompt("对方" + (data.op == "mute" ? "开启" : "关闭") + (data.type == "audio" ? "静音" : "静视"));
+						},
+
+						// ================== 收到远端切换摄像头消息 ==================
+						onRemoteChangeCamera : function(data, isCalling) {
+							console.log("收到远端切换摄像头消息...", data, isCalling);
+						},
+
+						// ================== 收到远端视频会话挂断消息 ==================
+						onRemoteHandup : function(data, isCalling) {
+							console.log("收到远端视频会话挂断消息...", data, isCalling);
+							console.log("会话状态标志 => false");
+							g_isCalling = false;
+
+							console.log("关闭码率设置功能");
+							$('#bandwidth').attr("disabled", true);
+						},
+
+						// ================== 收到远端用户断线消息 ==================
+						onRemoteDisconnect : function(roomid, disconnect_user, userlist) {
+							console.log("收到远端用户断线消息...");
+
+							console.log("会话状态标志 => false");
+							g_isCalling = false;
+
+							// 刷新列表显示
+							$('#login-users').empty();  // 先清空用户列表
+							// 重新加载
+							for (let index in userlist) {
+								$('#login-users').append($('<li>').text(userlist[index].account));
+							}
+						},
+
+						// 码率数据事件（每隔一秒回调）
+						onStreamRate : function(sendRate, resvRate) {
+							$('#rate')[0].innerHTML =
+								"发送速率：" + sendRate  +　" kb/s" + "<br>" +
+					      "接收速率：" + resvRate  +　" kb/s" + "<br>"
+				      ;
+						}
+					}
+			};
+
+			if(!rtcClient)
+				rtcClient = new GGRtcClient(options);
+		}
+
+
+		/* 初始化控件基础绑定事件 */
+		function doBindControlEvent() {
+
+			// 加入房间按钮
+			$('#btn_joinRoom').click(function(e) {
+
+				// 初始化RTCClient对象
+		  	createRTCClient();
+
+			  var room = $("#roomId").val();    // 房间号
+			  var account = $("#userId").val(); // 用户名
+			  console.log("用户 " + account + " 加入 " + room);
+
+				// 发送加入房间请求
+				rtcClient.join(function(result) {
+						// 打印加入房间后服务端返回的信息
+						// {"code":0,"msg":"enter successful","room":"room1","accounts":[{"account":"user_32860","id":"ttT5-gWXY0wBpcKbAAAH"}]}
+						console.log("加入房间的执行结果: " + JSON.stringify(result));
+
+						// 把房间的所有人显示到用户列表
+						for (let index in result.accounts) {
+					    $('#login-users').append($('<li>').text(result.accounts[index].account));
+						}
+
+						if(result.code == 0) {
+				      console.log("进入房间标志");
+							g_isJoinRoom = true; // 进入房间标志
+						}
+					}
+				);
+			});
+
+
+			// 离开房间按钮
+			$('#btn_leaveRoom').click(function(e) {
+				if(!g_isJoinRoom) {
+					showPrompt('未加入房间');
+					return; // 未加入房间，直接退出
+				}
+
+				var room = $("#roomId").val();    // 房间号
+				var account = $("#userId").val(); // 用户名
+				console.log("用户 " + account + " 离开 " + room);
+
+				// 执行离开房间
+				rtcClient.leave(function (result) {
+						// 打印离开房间后服务端返回的信息
+						// {"code":0,"msg":"user_9328986 exited from room1"}
+						console.log("离开房间的执行结果：" + JSON.stringify(result));
+
+						// 清空用户列表
+						$('#login-users').empty();
+
+						// 如果服务端成功执行
+						if(result.code == 0) {
+							console.log("会话状态标志 => false");
+							g_isCalling = false;
+							console.log("退出房间标志 => false");
+							g_isJoinRoom = false;
+							console.log("清空GGRtcClient对象");
+							rtcClient = null;
+							showPrompt('成功退出房间');
+						}
+					}
+				);
+			});
+
+
+			// 发送消息按钮
+			$('#btn_send').click(function(e) {
+				if(!g_isJoinRoom) return; // 未加入房间，直接退出
+
+				var account = $("#userId").val();   // 用户名
+				var msg = $("#sendMsg").val();      // 发送的消息
+				if(!msg) return;
+				console.log("【客户端】" + account + " 发送：" + msg);
+
+				var content = document.querySelector("#content");  // 历史消息框
+				content.value += "我说:" + msg + "\r\n";
+
+				// 发送
+				rtcClient.sendChatMessage(msg, function callback(info) {
+				    console.log("服务端回调：" + JSON.stringify(info));
+				});
+
+				// 清空文本框
+				$('#sendMsg').val('');
+
+				// 聊天框自动滚动到最下方
+				content.scrollTop = content.scrollHeight;
+			});
+
+
+			// 视频呼叫按钮
+			$('#btn_call').click(function(e) {
+				if(!g_isJoinRoom) {
+					alert("您未进入房间");
+					return;
+				}
+
+			  if(g_isCalling) {
+				  alert("当前正在与用户" + rtcClient._remoteUser + "通话，请先挂断");
+				  return;
+				}
+
+				var caller = $("#userId").val();   // 当前用户
+				var callee = $("#callee").val();   // 被呼叫用户
+
+				if(!callee) {
+					alert("未选择被呼叫用户");
+					return;
+				}
+				if(caller == callee) {
+				  alert('不能跟自己进行视频会话');
+				  return;
+				}
+
+				console.log(caller + " 呼叫 " + callee);
+				// 与信令服务交互
+				rtcClient.call(callee, function(result) {
+					// 打印回调信息
+					console.log("视频呼叫的执行结果: " + JSON.stringify(result)); // {"code":0,"msg":"send call msg to user_2199327"}
+					// 提示错误信息
+					if(result.code != 0) {
+						alert("呼叫失败: " + result.msg);
+					}
+				});
+			});
+
+
+			// 静音处理
+			$("#btn_muteAudio").click(function(e) {
+				if(!g_isCalling) {
+					alert("请先建立视频会话")
+					return;
+				}
+
+				var flag;  // true-设置静音，false-解除静音
+				var btnCaption = $("#btn_muteAudio")[0].innerHTML;
+				if(btnCaption == "静音") {
+					$("#btn_muteAudio")[0].innerHTML = "解除静音";
+					flag = true;
+				} else {
+					$("#btn_muteAudio")[0].innerHTML = "静音";
+					flag = false;
+				}
+
+				// 禁用本地音频
+				console.log("本地静音状态:" + (flag ? "开启" : "关闭"));
+				rtcClient.muteAudio(flag);
+			});
+
+
+			// 静视处理
+			$("#btn_muteVideo").click(function(e) {
+				if(!g_isCalling) {
+					alert("请先建立视频会话")
+					return;
+				}
+
+				var flag;  // true-静视，false-解除静视
+				var btnCaption = $("#btn_muteVideo")[0].innerHTML;
+				if(btnCaption == "静视") {
+					$("#btn_muteVideo")[0].innerHTML = "解除静视";
+					flag = true;
+				} else {
+					$("#btn_muteVideo")[0].innerHTML = "静视";
+					flag = false;
+				}
+
+				// 禁用本地视频
+				console.log("本地静视状态:" + (flag ? "开启" : "关闭"));
+				rtcClient.muteVideo(flag);
+			});
+
+
+			// 视频挂断按钮
+			$('#btn_hangup').click(function(e) {
+		    if(!g_isCalling)  {
+					alert("当前未建立通话");
+					return;
+				}
+
+			  // 发出挂断信令
+				rtcClient.hangup(() => {
+					console.log("挂断成功");
+					console.log("会话状态标志 => false");
+					g_isCalling = false;
+				});
+			});
+
+
+			// 分享按钮
+			$('#btn_share').click(function(e) {
+				if(!g_isCalling) {
+					alert("请先建立视频会话")
+					return;
+				}
+
+				var status;
+				var btnCaption = $("#btn_share")[0].innerHTML;
+				if(btnCaption == "开始分享本地桌面") {
+					$("#btn_share")[0].innerHTML = "停止分享本地桌面";
+					status = true;
+					rtcClient.doLocalShare();  // 开始分享操作
+				}
+				else {
+					$("#btn_share")[0].innerHTML = "开始分享本地桌面";
+					status = false;
+					rtcClient.stopLocalShare();  // 停止分享操作
+				}
+			});
+
+
+			// 录制本地视频
+			$("#btn_recLocal").click(function(e) {
+				if(!g_isCalling) {
+					alert("请先建立视频会话")
+					return;
+				}
+
+				var btnCaption = $("#btn_recLocal")[0].innerHTML;
+				if(btnCaption == "录制本地视频") {
+					$("#btn_recLocal")[0].innerHTML = "停止录制本地视频";
+					rtcClient.startLocalRecord();
+				} else {
+					$("#btn_recLocal")[0].innerHTML = "录制本地视频";
+					rtcClient.stopLocalRecord();
+				}
+			});
+
+
+			// 播放本地录像
+			$("#btn_replayLocal").click(function(){
+				if(!rtcClient) return;
+				rtcClient.playLocalRecord("rtcLocalREC");
+			});
+
+
+			// 下载本地视频
+			$("#btn_downloadLocal").click(function(){
+				if(!rtcClient) return;
+				rtcClient.saveLocalRecord("LocalRecordFileName"); // 参数：文件名
+			});
+
+
+			// 录制远端视频
+			$("#btn_recRemote").click(function(e) {
+				if(!g_isCalling) {
+					alert("请先建立视频会话")
+					return;
+				}
+
+				var btnCaption = $("#btn_recRemote")[0].innerHTML;
+				if(btnCaption == "录制远端视频") {
+					$("#btn_recRemote")[0].innerHTML = "停止录制远端视频";
+					rtcClient.startRemoteRecord();
+				} else {
+					$("#btn_recRemote")[0].innerHTML = "录制远端视频";
+					rtcClient.stopRemoteRecord();
+				}
+			});
+
+
+			// 播放远端录像
+			$("#btn_replayRemote").click(function(){
+				if(!rtcClient) return;
+				rtcClient.playRemoteRecord("rtcRemoteREC");
+			});
+
+
+			// 下载远端视频
+			$("#btn_downloadRemote").click(function(){
+				if(!rtcClient) return;
+				rtcClient.saveRemoteRecord("RemoteRecordFileName"); // 参数：文件名
+			});
+
+
+
+			// 上传本地视频
+			$("#btn_uploadLocal").click(function(){
+				if(!rtcClient) return;
+
+				var roomId = $('#roomId').val();   // 房间号
+				var caller = $("#userId").val();   // 当前用户
+				var callee = $("#callee").val();   // 被呼叫用户
+				var flowno = "000001";  // 交易流水
+
+				var fileName = "record_" + flowno + "_" + roomId + "_" + caller;
+
+				var resultCB = function(info) {  // 结果回调
+					 console.log("上传结果：", info);
+				}
+				var percentCB = function(info) {  // 上传进度回调（可省略）
+					 console.log("上传进度：", info);
+				}
+
+				rtcClient.uploadLocalRecord(fileName, resultCB, percentCB);
+			});
+
+
+			// 上传远端视频
+			$("#btn_uploadRemote").click(function(){
+				if(!rtcClient) return;
+
+				var roomId = $('#roomId').val();   // 房间号
+				var caller = $("#userId").val();   // 当前用户
+				var callee = $("#callee").val();   // 被呼叫用户
+				var flowno = "000001";  // 交易流水
+
+				var resultCB = function(info) {  // 结果回调
+					 console.log("上传结果：", info);
+				}
+				var percentCB = function(info) {  // 上传进度回调（可省略）
+					 console.log("上传进度：", info);
+				}
+
+				var fileName = "record_" + flowno + "_" + roomId + "_" + callee;
+				rtcClient.uploadRemoteRecord(fileName, resultCB, percentCB);
+			});
+
+		}
+
+
+		// 初始化控件变更事件
+		function doBindChangeEvent() {
+			/* 设备切换事件 */
+			// 摄像头切换
+			$('#cameraId').on("change", async function (evt) {
+				console.log("切换摄像头设备id = " + this.value);
+				g_currentVideoID = this.value;
+				update_g_constraints();  // 刷新g_constraints参数
+
+				// 每次切换，静音/视按钮复位
+				$("#btn_muteAudio")[0].innerHTML = "静音";
+				$("#btn_muteVideo")[0].innerHTML = "静视";
+
+				// 如果在通话中，则切换视频
+				if(g_isCalling) await rtcClient.doChangeCamera();
+			});
+
+
+			// 麦克风切换
+			$('#microphoneId').on("change", function (evt) {
+				console.log("当前麦克风设备id = " + this.value);
+				g_currentAudioID = this.value;
+				update_g_constraints(); // 刷新g_constraints参数
+			});
+
+
+			// 分辨率选择事件
+			$('#cameraPixel').on("change", async function (evt) {
+				g_currentPixel = this.value;
+				console.log("当前分辨率 g_currentPixel = " + g_currentPixel);
+				update_g_constraints();  // 更新g_constraints
+
+				// 如果在通话中，则切换视频
+				if(g_isCalling) await rtcClient.doChangeCamera();
+			});
+			// selectedIndex属性设置不会触发change事件
+			// 所以此处先触发一次change事件，方便更新g_constraints参数
+			$('#cameraPixel').trigger("change");
+
+
+			// 帧率改变事件
+			// 如果正在视频当中，则不重新做媒体协商
+			$('#frameRate').on("keyup", async function (evt) {
+				g_currentFrameRate = parseInt(this.value);
+				if(g_currentFrameRate > 24) g_currentFrameRate = 24;
+				if(g_currentFrameRate <= 0) g_currentFrameRate = 15;
+				console.log("当前帧率 g_currentFrameRate = " + g_currentFrameRate);
+
+				update_g_constraints(); // 更新g_constraints
+			});
+
+
+			// 码率切换（需要在视频交互过程中切换）
+			$('#bandwidth').on("change", async function (evt) {
+				console.log("当前码率 = " + this.value + " kbps");
+
+				this.disabled = true;  // 每次设置时，在没成功设置前，先把本下拉框设为无效，防止用户频繁设置
+				var bw = this.value;
+				if(g_isCalling) rtcClient.doChangeBandwidth(bw);  // 设置
+				this.disabled = false;	// 设置成功后，再次启用本下拉框
+			});
+		}
+
+	});
+	</script>
+  </body>
+</html>
